@@ -152,11 +152,13 @@
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
 
         const ADMIN_EMAIL = 'deependrapal.vc@flipkart.com';
+        const LOAD_TIMEOUT = 5000; // 5 seconds
 
         let db = null;
         let auth = null;
         let userId = null;
         let caspherData = [];
+        let isDataLoaded = false;
         
         const loginSection = document.getElementById('login-section');
         const uploadSection = document.getElementById('upload-section');
@@ -206,6 +208,14 @@
                 userId = user.uid;
                 userIdDisplay.textContent = `User ID: ${userId}`;
                 setupFirestoreListeners();
+                // Start a timeout to check if data is loaded after a few seconds
+                setTimeout(() => {
+                    if (!isDataLoaded) {
+                        loadingSpinner.classList.add('hidden');
+                        searchUIContainer.classList.remove('hidden');
+                        uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ Data could not be loaded. Please check your connection or try again.</span>`;
+                    }
+                }, LOAD_TIMEOUT);
             } else {
                 console.log("User is signed out");
             }
@@ -216,6 +226,7 @@
              onSnapshot(dataDocRef, (docSnap) => {
                 loadingSpinner.classList.add('hidden');
                 searchUIContainer.classList.remove('hidden');
+                isDataLoaded = true; // Mark as loaded
 
                 if (docSnap.exists()) {
                     caspherData = docSnap.data().data;
@@ -228,6 +239,7 @@
                 console.error("Error fetching data:", error);
                 loadingSpinner.classList.add('hidden');
                 searchUIContainer.classList.remove('hidden');
+                isDataLoaded = true; // Still mark as loaded to prevent timeout message
                 uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">Error: Could not load data.</span>`;
             });
         };
@@ -688,8 +700,7 @@
             writeString(view, 0, 'RIFF');
             view.setUint32(4, 36 + pcm16.byteLength, true);
             writeString(view, 8, 'WAVE');
-            writeString(view, 12, 'fmt ');
-            view.setUint32(16, 16, true);
+            view.setUint32(12, 16, true);
             view.setUint16(20, 1, true); // 1 channel
             view.setUint16(22, 1, true); // 1 channel
             view.setUint32(24, sampleRate, true);
