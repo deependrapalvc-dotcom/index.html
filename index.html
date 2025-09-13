@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caspher Finder Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0F172A; /* Deep slate background */
+            color: #E2E8F0;
+        }
+        .accent-bg { background-color: #34D399; } /* Emerald green */
+        .accent-text { color: #34D399; }
+        .border-accent { border-color: #34D399; }
+        .ring-accent:focus { ring-color: #34D399; }
+        
+        #drop-zone {
+            border: 2px dashed #475569;
+            transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+        }
+        #drop-zone.drag-over {
+            background-color: #1E293B;
+            border-color: #34D399;
+        }
+        .result-item {
+            border-left: 4px solid #475569;
+            transition: all 0.2s ease-in-out;
+        }
+        .result-item:hover {
+            background-color: #1E293B;
+            border-left-color: #34D399;
+            transform: translateY(-2px);
+        }
+        .hidden {
+            display: none;
+        }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.75);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: #1E293B;
+            padding: 2rem;
+            border-radius: 1rem;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            position: relative;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center p-4 bg-slate-950">
+    <!-- Admin Login Toggle Button -->
+    <section id="admin-toggle-section" class="fixed top-4 right-4 z-50">
+        <button id="admin-toggle-button" class="bg-slate-700 text-white font-bold py-2 px-4 rounded-full shadow-lg transition-transform hover:scale-105">Admin</button>
+    </section>
+
+    <main class="w-full max-w-4xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-extrabold accent-text">Caspher Finder</h1>
+            <p class="text-lg text-gray-400 mt-2">Welcome! <span id="user-id"></span></p>
+        </header>
+
+        <!-- Admin Login Section (hidden by default) -->
+        <section id="login-section" class="hidden fixed top-16 right-4 w-full max-w-sm bg-slate-800 p-8 rounded-2xl shadow-lg z-40">
+            <h2 class="text-2xl font-bold mb-4 text-white">Admin Login</h2>
+            <div class="flex flex-col space-y-4">
+                <input type="email" id="admin-email" placeholder="Enter your email" class="w-full p-4 bg-slate-700 border-2 border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-2 ring-accent transition">
+                <button id="login-button" class="accent-bg text-gray-900 font-bold py-4 px-8 rounded-lg shadow-md transition-transform hover:scale-105">Login</button>
+            </div>
+            <div id="login-status" class="text-center mt-4 text-gray-400"></div>
+        </section>
+
+        <!-- Admin File Upload Section (Visible only after admin login) -->
+        <section id="upload-section" class="hidden w-full bg-slate-800 p-8 rounded-2xl shadow-lg mb-8">
+            <h2 class="text-2xl font-bold mb-4 text-white">Upload your file (Admin Only)</h2>
+            <p class="text-gray-400 mb-4">Formats: CSV, XLSX, PDF</p>
+            <div id="drop-zone" class="w-full p-10 text-center rounded-xl cursor-pointer">
+                <div class="flex flex-col items-center justify-center text-gray-400">
+                    <svg class="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-4-4V6a4 4 0 014-4h10a4 4 0 014 4v6a4 4 0 01-4 4H7z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 16v1a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2h2m16 9v-5.5a2.5 2.5 0 00-5 0V14m-2-5h5l-2.5-4-2.5 4z"></path></svg>
+                    <p class="text-xl font-semibold">Drag and drop your file here</p>
+                    <p class="mt-2">or</p>
+                    <button id="file-select-button" class="mt-4 accent-bg text-gray-900 font-bold py-2 px-6 rounded-lg shadow-md transition-transform hover:scale-105">Select File</button>
+                    <input type="file" id="file-input" class="hidden">
+                </div>
+            </div>
+            <div id="upload-status" class="text-center mt-4 text-gray-400"></div>
+            <!-- Gemini-powered Data Analysis Button -->
+            <button id="analyze-data-button" class="w-full mt-6 accent-bg text-gray-900 font-bold py-4 px-8 rounded-lg shadow-md transition-transform hover:scale-105">✨ Analyze Data</button>
+        </section>
+
+        <!-- Public Search and Results Section (Always visible) -->
+        <section id="search-section" class="w-full bg-slate-800 p-8 rounded-2xl shadow-lg mt-8">
+            <h2 class="text-2xl font-bold mb-4 text-white">Caspher Finder</h2>
+            <div id="loading-spinner" class="text-center text-gray-400">
+                <p>Loading data...</p>
+            </div>
+            <div id="search-ui-container" class="hidden">
+                <div class="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-4">
+                    <input type="text" id="search-input" placeholder="Search here..." class="w-full p-4 bg-slate-700 border-2 border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-2 ring-accent transition">
+                    <button id="search-button" class="w-full md:w-auto accent-bg text-gray-900 font-bold py-4 px-8 rounded-lg shadow-md transition-transform hover:scale-105">Search</button>
+                </div>
+            </div>
+        </section>
+            
+        <section id="results-section" class="w-full mt-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-white">Search Results</h2>
+                <p id="result-count" class="text-gray-400"></p>
+            </div>
+            <div id="result-box" class="space-y-3">
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal for LLM Summary -->
+    <div id="summary-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="flex justify-between items-center">
+                <h3 id="modal-title" class="text-xl font-bold mb-4 text-white">Data Report</h3>
+                <button id="close-modal-btn" class="text-gray-400 hover:text-white transition">&times;</button>
+            </div>
+            <div class="flex items-center gap-2 mb-4">
+                <p id="summary-content" class="text-gray-300 leading-relaxed">Loading...</p>
+                <audio id="tts-audio" class="hidden" controls></audio>
+            </div>
+            <div class="flex justify-end mt-4">
+                <button id="listen-report-button" class="accent-bg text-gray-900 font-bold py-2 px-4 rounded-lg shadow-md transition-transform hover:scale-105">✨ Listen to Report</button>
+            </div>
+        </div>
+    </div>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+
+        const ADMIN_EMAIL = 'deependrapal.vc@flipkart.com';
+
+        let db = null;
+        let auth = null;
+        let userId = null;
+        let caspherData = [];
+        
+        const loginSection = document.getElementById('login-section');
+        const uploadSection = document.getElementById('upload-section');
+        const searchUIContainer = document.getElementById('search-ui-container');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const userIdDisplay = document.getElementById('user-id');
+        
+        const adminEmailInput = document.getElementById('admin-email');
+        const loginButton = document.getElementById('login-button');
+        const loginStatus = document.getElementById('login-status');
+        const adminToggleButton = document.getElementById('admin-toggle-button');
+
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileSelectButton = document.getElementById('file-select-button');
+        const uploadStatus = document.getElementById('upload-status');
+        const analyzeDataButton = document.getElementById('analyze-data-button');
+        
+        const searchInput = document.getElementById('search-input');
+        const searchButton = document.getElementById('search-button');
+        const resultBox = document.getElementById('result-box');
+        const resultCount = document.getElementById('result-count');
+
+        const summaryModal = document.getElementById('summary-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const summaryContent = document.getElementById('summary-content');
+        const listenReportButton = document.getElementById('listen-report-button');
+        const ttsAudio = document.getElementById('tts-audio');
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : '';
+        
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+        
+        if (initialAuthToken) {
+            signInWithCustomToken(auth, initialAuthToken);
+        } else {
+            signInAnonymously(auth);
+        }
+        
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                userId = user.uid;
+                userIdDisplay.textContent = `User ID: ${userId}`;
+                setupFirestoreListeners();
+            } else {
+                console.log("User is signed out");
+            }
+        });
+        
+        const setupFirestoreListeners = () => {
+             const dataDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'caspher-data', 'files_master_doc');
+             onSnapshot(dataDocRef, (docSnap) => {
+                loadingSpinner.classList.add('hidden');
+                searchUIContainer.classList.remove('hidden');
+
+                if (docSnap.exists()) {
+                    caspherData = docSnap.data().data;
+                    uploadStatus.innerHTML = `<span class="text-green-400 font-semibold">✓ Data loaded. Total entries: ${caspherData.length}</span>`;
+                } else {
+                    caspherData = [];
+                    uploadStatus.innerHTML = `<span class="text-gray-400 font-semibold">No data found. Admin can upload a file.</span>`;
+                }
+             }, (error) => {
+                console.error("Error fetching data:", error);
+                loadingSpinner.classList.add('hidden');
+                searchUIContainer.classList.remove('hidden');
+                uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">Error: Could not load data.</span>`;
+            });
+        };
+
+        adminToggleButton.addEventListener('click', () => {
+            loginSection.classList.toggle('hidden');
+        });
+
+        loginButton.addEventListener('click', () => {
+            const email = adminEmailInput.value.trim().toLowerCase();
+            if (email === ADMIN_EMAIL) {
+                loginSection.classList.add('hidden');
+                uploadSection.classList.remove('hidden');
+                loginStatus.textContent = 'Admin login successful.';
+            } else {
+                loginSection.classList.add('hidden');
+                loginStatus.textContent = `Welcome, user! Redirecting to search...`;
+            }
+        });
+
+        const preventDefaults = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        };
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('drag-over'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('drag-over'), false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFile(files[0]);
+        }, false);
+
+        fileSelectButton.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+
+        const columnAliases = {
+            id: ['casperfhrid', 'caspher id', 'caspherid', 'id'],
+            hub: ['hubname', 'hub name', 'hub'],
+            name: ['full_name', 'fullname', 'full name', 'name'],
+            mobile: ['contact', 'mobile', 'phone number', 'phonenumber'],
+            doj: ['doj']
+        };
+
+        const findColumnIndex = (header, aliases) => {
+            for (const alias of aliases) {
+                const index = header.indexOf(alias);
+                if (index !== -1) {
+                    return index;
+                }
+            }
+            return -1;
+        };
+        
+        function handleFile(file) {
+            if (!file) {
+                uploadStatus.textContent = 'No file selected.';
+                return;
+            }
+
+            const fileName = file.name;
+            const fileExtension = fileName.split('.').pop().toLowerCase();
+            uploadStatus.textContent = `Loading "${fileName}"...`;
+            
+            if (fileExtension === 'csv') {
+                handleCSV(file);
+            } else if (fileExtension === 'xlsx') {
+                handleXLSX(file);
+            } else if (fileExtension === 'pdf') {
+                handlePDF(file);
+            } else {
+                uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ Unsupported file format. Please upload a CSV, XLSX, or PDF file.</span>`;
+            }
+        }
+
+        function handleCSV(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const lines = e.target.result.split(/\r?\n/);
+                parseAndUploadData(lines, 'CSV');
+            };
+            reader.onerror = () => {
+                uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ Error reading file.</span>`;
+            };
+            reader.readAsText(file);
+        }
+
+        function handleXLSX(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const csvData = XLSX.utils.sheet_to_csv(worksheet);
+                const lines = csvData.split(/\r?\n/);
+                parseAndUploadData(lines, 'XLSX');
+            };
+            reader.onerror = () => {
+                uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ Error reading file.</span>`;
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        async function handlePDF(file) {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const arrayBuffer = e.target.result;
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                let text = '';
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    text += content.items.map(item => item.str).join(' ');
+                }
+                
+                const pdfData = [{ isPdf: true, content: text }];
+                await uploadToFirestore(pdfData, 'PDF');
+            };
+            reader.onerror = () => {
+                uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ Error reading file.</span>`;
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function parseAndUploadData(lines, fileType) {
+            const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+            
+            const columnIndices = {
+                id: findColumnIndex(header, columnAliases.id),
+                hub: findColumnIndex(header, columnAliases.hub),
+                name: findColumnIndex(header, columnAliases.name),
+                mobile: findColumnIndex(header, columnAliases.mobile),
+                doj: findColumnIndex(header, columnAliases.doj),
+            };
+
+            if (columnIndices.id === -1 || columnIndices.hub === -1 || columnIndices.name === -1 || columnIndices.mobile === -1) {
+                const missing = [];
+                if (columnIndices.id === -1) missing.push(`CasperFHRID (${columnAliases.id.join(', ')})`);
+                if (columnIndices.hub === -1) missing.push(`HubName (${columnAliases.hub.join(', ')})`);
+                if (columnIndices.name === -1) missing.push(`Full Name (${columnAliases.name.join(', ')})`);
+                if (columnIndices.mobile === -1) missing.push(`Contact (${columnAliases.mobile.join(', ')})`);
+                
+                uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ Missing required columns in file header. <br>Missing: ${missing.join(', ')}</span>`;
+                return;
+            }
+
+            const parsedData = [];
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.trim() === '') continue;
+                const fields = line.split(',');
+                const dataItem = {
+                    id: fields[columnIndices.id]?.trim() || 'N/A',
+                    hub: fields[columnIndices.hub]?.trim() || 'N/A',
+                    name: fields[columnIndices.name]?.trim() || 'N/A',
+                    mobile: fields[columnIndices.mobile]?.trim() || 'N/A',
+                    doj: (columnIndices.doj !== -1 && fields[columnIndices.doj]) ? fields[columnIndices.doj]?.trim() : 'N/A'
+                };
+                parsedData.push(dataItem);
+            }
+            uploadToFirestore(parsedData, fileType);
+        }
+
+        async function uploadToFirestore(data, fileType) {
+            if (!userId) {
+                uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ Admin login is required to upload a file.</span>`;
+                return;
+            }
+
+            try {
+                const publicDataDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'caspher-data', 'files_master_doc');
+                await setDoc(publicDataDocRef, {
+                    data: data,
+                    uploadedBy: userId,
+                    uploadTime: new Date().toISOString(),
+                    fileType: fileType
+                });
+                uploadStatus.innerHTML = `<span class="text-green-400 font-semibold">✓ File uploaded and saved to database.</span>`;
+            } catch (error) {
+                console.error("Error uploading data to Firestore:", error);
+                uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ Error: Could not save data to database.</span>`;
+            }
+        }
+
+        const performSearch = () => {
+            if (caspherData.length === 0) {
+                resultBox.innerHTML = '<p class="text-center text-gray-400">No data available. Please wait for the admin to upload a file.</p>';
+                resultCount.textContent = '0 results';
+                return;
+            }
+
+            const query = searchInput.value.toLowerCase().trim();
+            if (query === '') {
+                resultBox.innerHTML = '<p class="text-center text-gray-400">Please type something to search.</p>';
+                resultCount.textContent = '';
+                return;
+            }
+            
+            const matches = caspherData.filter(item => {
+                if (item.isPdf) {
+                    return item.content.toLowerCase().includes(query);
+                } else {
+                    return Object.values(item).some(value => 
+                        typeof value === 'string' && value.toLowerCase().includes(query)
+                    );
+                }
+            });
+
+            renderResults(matches);
+        };
+        
+        function renderResults(matches) {
+            if (matches.length === 0) {
+                resultBox.innerHTML = '<p class="text-center text-gray-400">No results found.</p>';
+                resultCount.textContent = '0 results found';
+                return;
+            }
+
+            let html = '';
+            matches.forEach(match => {
+                if (match.isPdf) {
+                    const snippet = match.content.substring(
+                        match.content.toLowerCase().indexOf(searchInput.value.toLowerCase()),
+                        match.content.toLowerCase().indexOf(searchInput.value.toLowerCase()) + 200
+                    ) + '...';
+                    html += `
+                        <div class="result-item bg-slate-800 p-4 rounded-lg flex flex-col justify-between gap-y-2">
+                            <h3 class="font-bold text-white">PDF Content Match</h3>
+                            <p class="text-gray-400 mt-2">${snippet}</p>
+                            <div class="flex-shrink-0 mt-4 md:mt-0">
+                                <button class="generate-summary-btn accent-bg text-gray-900 font-bold py-2 px-4 rounded-lg shadow-md transition-transform hover:scale-105"
+                                    data-content="${encodeURIComponent(match.content)}">
+                                    ✨ Generate Report
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="result-item bg-slate-800 p-4 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-x-6 gap-y-2">
+                            <div class="flex-grow">
+                                <div class="flex flex-wrap gap-x-6 gap-y-2">
+                                    <div class="flex-shrink-0"><strong class="text-gray-400">Casper ID:</strong> <span class="font-semibold text-white">${match.id}</span></div>
+                                    <div class="flex-shrink-0"><strong class="text-gray-400">Hub Name:</strong> <span class="font-semibold text-white">${match.hub}</span></div>
+                                    <div class="flex-shrink-0"><strong class="text-gray-400">Full Name:</strong> <span class="font-semibold text-white">${match.name}</span></div>
+                                    <div class="flex-shrink-0"><strong class="text-gray-400">Contact:</strong> <span class="font-semibold text-white">${match.mobile}</span></div>
+                                </div>
+                            </div>
+                            <div class="flex-shrink-0 mt-4 md:mt-0">
+                                <button class="generate-summary-btn accent-bg text-gray-900 font-bold py-2 px-4 rounded-lg shadow-md transition-transform hover:scale-105"
+                                    data-id="${match.id}" data-hub="${match.hub}" data-name="${match.name}" data-mobile="${match.mobile}" data-doj="${match.doj}">
+                                    ✨ Generate Report
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+
+            resultBox.innerHTML = html;
+            resultCount.textContent = `${matches.length} results found`;
+        }
+
+        async function generateSummary(data) {
+            summaryModal.classList.remove('hidden');
+            modalTitle.textContent = 'Data Report';
+            summaryContent.innerHTML = `<span class="text-white">Loading...</span>`;
+            listenReportButton.disabled = true;
+            ttsAudio.classList.add('hidden');
+            
+            const prompt = `As a professional data analyst, generate a concise and clear report based on the following information.
+            Data: ${JSON.stringify(data)}
+            Your report should highlight key identifiers and characteristics.`;
+            
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                tools: [{ "google_search": {} }],
+                systemInstruction: {
+                    parts: [{ text: "You are a professional data analyst. Your task is to generate a concise report for a single data entry. Highlight key details and provide a brief analysis." }]
+                }
+            };
+            
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                const text = result?.candidates?.[0]?.content?.parts?.[0]?.text || 'Could not generate report.';
+                summaryContent.textContent = text;
+                listenReportButton.disabled = false;
+            } catch (error) {
+                console.error('Error fetching summary:', error);
+                summaryContent.textContent = 'Error: Could not generate report. Please try again.';
+                listenReportButton.disabled = true;
+            }
+        }
+
+        async function analyzeData() {
+            if (caspherData.length === 0) {
+                // Using a custom message box instead of alert()
+                showCustomMessage('No data available. Please upload a file first.');
+                return;
+            }
+            summaryModal.classList.remove('hidden');
+            modalTitle.textContent = 'Data Analysis Report';
+            summaryContent.innerHTML = `<span class="text-white">Analyzing data...</span>`;
+            listenReportButton.disabled = true;
+            ttsAudio.classList.add('hidden');
+
+            const limitedData = caspherData.slice(0, 500); // Limiting data to fit within LLM context window.
+            
+            const prompt = `As a professional data analyst, analyze this dataset and provide a brief summary of key trends, characteristics, and notable patterns.
+            Data: ${JSON.stringify(limitedData)}
+            Present your summary in bullet points.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: {
+                    parts: [{ text: "You are a data analyst. Your task is to provide a high-level analysis of a large dataset, including key trends and patterns." }]
+                }
+            };
+            
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                const text = result?.candidates?.[0]?.content?.parts?.[0]?.text || 'Could not analyze data.';
+                summaryContent.textContent = text;
+                listenReportButton.disabled = false;
+            } catch (error) {
+                console.error('Error fetching analysis:', error);
+                summaryContent.textContent = 'Error: Could not analyze data. Please try again.';
+                listenReportButton.disabled = true;
+            }
+        }
+        
+        async function generateTTS() {
+            const textToSpeak = summaryContent.textContent;
+            if (!textToSpeak || textToSpeak.includes('Loading...')) {
+                return;
+            }
+
+            listenReportButton.disabled = true;
+            ttsAudio.classList.add('hidden');
+            summaryContent.textContent = 'Preparing audio...';
+            
+            const payload = {
+                contents: [{ parts: [{ text: textToSpeak }] }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: { voiceName: "Achird" }
+                        }
+                    }
+                },
+                model: "gemini-2.5-flash-preview-tts"
+            };
+            
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                const part = result?.candidates?.[0]?.content?.parts?.[0];
+                const audioData = part?.inlineData?.data;
+                const mimeType = part?.inlineData?.mimeType;
+
+                if (audioData && mimeType && mimeType.startsWith("audio/")) {
+                    const sampleRate = parseInt(mimeType.match(/rate=(\d+)/)[1], 10);
+                    const pcmData = base64ToArrayBuffer(audioData);
+                    const pcm16 = new Int16Array(pcmData);
+                    const wavBlob = pcmToWav(pcm16, sampleRate);
+                    const audioUrl = URL.createObjectURL(wavBlob);
+                    
+                    ttsAudio.src = audioUrl;
+                    ttsAudio.classList.remove('hidden');
+                    summaryContent.textContent = textToSpeak; // Restore original text
+                    ttsAudio.play();
+                } else {
+                    throw new Error("Invalid audio data received.");
+                }
+            } catch (error) {
+                console.error('TTS error:', error);
+                summaryContent.textContent = 'Could not generate audio. Please try again.';
+            } finally {
+                listenReportButton.disabled = false;
+            }
+        }
+        
+        // Helper function to show a custom message box instead of alert()
+        function showCustomMessage(message) {
+            const messageBox = document.createElement('div');
+            messageBox.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background-color: #1f2937;
+                color: white;
+                padding: 2rem;
+                border-radius: 1rem;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+                z-index: 2000;
+                text-align: center;
+                max-width: 400px;
+            `;
+            messageBox.innerHTML = `
+                <p>${message}</p>
+                <button onclick="this.parentNode.remove()" style="margin-top: 1rem; padding: 0.5rem 1rem; background-color: #ffff00; color: #111827; border-radius: 0.5rem; font-weight: bold;">OK</button>
+            `;
+            document.body.appendChild(messageBox);
+        }
+
+        // Helper functions for audio conversion
+        function base64ToArrayBuffer(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function pcmToWav(pcm16, sampleRate) {
+            const buffer = new ArrayBuffer(44 + pcm16.byteLength);
+            const view = new DataView(buffer);
+            
+            // WAV header
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + pcm16.byteLength, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true); // 1 channel
+            view.setUint16(22, 1, true); // 1 channel
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * 2, true); // Byte rate
+            view.setUint16(32, 2, true); // Block align
+            view.setUint16(34, 16, true); // Bits per sample
+            writeString(view, 36, 'data');
+            view.setUint32(40, pcm16.byteLength, true);
+            
+            // Write PCM data
+            for (let i = 0; i < pcm16.length; i++) {
+                view.setInt16(44 + i * 2, pcm16[i], true);
+            }
+            
+            return new Blob([view], { type: 'audio/wav' });
+        }
+
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+
+        resultBox.addEventListener('click', (e) => {
+            const btn = e.target.closest('.generate-summary-btn');
+            if (btn) {
+                let data = {};
+                if (btn.dataset.content) {
+                    data.content = decodeURIComponent(btn.dataset.content);
+                } else {
+                    data = {
+                        id: btn.dataset.id,
+                        hub: btn.dataset.hub,
+                        name: btn.dataset.name,
+                        mobile: btn.dataset.mobile,
+                        doj: btn.dataset.doj
+                    };
+                }
+                generateSummary(data);
+            }
+        });
+
+        searchButton.addEventListener('click', performSearch);
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+        analyzeDataButton.addEventListener('click', analyzeData);
+        listenReportButton.addEventListener('click', generateTTS);
+
+        closeModalBtn.addEventListener('click', () => {
+            summaryModal.classList.add('hidden');
+            ttsAudio.pause();
+        });
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                summaryModal.classList.add('hidden');
+                ttsAudio.pause();
+            }
+        });
+    </script>
+</body>
+</html>
