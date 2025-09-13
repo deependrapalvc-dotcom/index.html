@@ -107,10 +107,10 @@
         <!-- Public Search and Results Section (Always visible) -->
         <section id="search-section" class="w-full bg-slate-800 p-8 rounded-2xl shadow-lg mt-8">
             <h2 class="text-2xl font-bold mb-4 text-white">Caspher Finder</h2>
-            <div id="loading-spinner" class="text-center text-gray-400">
+            <div id="loading-spinner" class="text-center text-gray-400 hidden">
                 <p>Loading data...</p>
             </div>
-            <div id="search-ui-container" class="hidden">
+            <div id="search-ui-container">
                 <div class="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-4">
                     <input type="text" id="search-input" placeholder="Search here..." class="w-full p-4 bg-slate-700 border-2 border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-2 ring-accent transition">
                     <button id="search-button" class="w-full md:w-auto accent-bg text-gray-900 font-bold py-4 px-8 rounded-lg shadow-md transition-transform hover:scale-105">Search</button>
@@ -147,18 +147,15 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, getDocs, query, where, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
 
         const ADMIN_EMAIL = 'deependrapal.vc@flipkart.com';
-        const LOAD_TIMEOUT = 5000; // 5 seconds
 
         let db = null;
         let auth = null;
         let userId = null;
-        let caspherData = [];
-        let isDataLoaded = false;
         
         const loginSection = document.getElementById('login-section');
         const uploadSection = document.getElementById('upload-section');
@@ -207,43 +204,12 @@
             if (user) {
                 userId = user.uid;
                 userIdDisplay.textContent = `User ID: ${userId}`;
-                setupFirestoreListeners();
-                // Start a timeout to check if data is loaded after a few seconds
-                setTimeout(() => {
-                    if (!isDataLoaded) {
-                        loadingSpinner.classList.add('hidden');
-                        searchUIContainer.classList.remove('hidden');
-                        uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ Data could not be loaded. Please check your connection or try again.</span>`;
-                    }
-                }, LOAD_TIMEOUT);
+                // No need to call a listener for full data here, search will handle it.
             } else {
                 console.log("User is signed out");
             }
         });
         
-        const setupFirestoreListeners = () => {
-             const dataDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'caspher-data', 'files_master_doc');
-             onSnapshot(dataDocRef, (docSnap) => {
-                loadingSpinner.classList.add('hidden');
-                searchUIContainer.classList.remove('hidden');
-                isDataLoaded = true; // Mark as loaded
-
-                if (docSnap.exists()) {
-                    caspherData = docSnap.data().data;
-                    uploadStatus.innerHTML = `<span class="text-green-400 font-semibold">✓ Data loaded. Total entries: ${caspherData.length}</span>`;
-                } else {
-                    caspherData = [];
-                    uploadStatus.innerHTML = `<span class="text-gray-400 font-semibold">No data found. Admin can upload a file.</span>`;
-                }
-             }, (error) => {
-                console.error("Error fetching data:", error);
-                loadingSpinner.classList.add('hidden');
-                searchUIContainer.classList.remove('hidden');
-                isDataLoaded = true; // Still mark as loaded to prevent timeout message
-                uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">Error: Could not load data.</span>`;
-            });
-        };
-
         adminToggleButton.addEventListener('click', () => {
             loginSection.classList.toggle('hidden');
         });
@@ -367,7 +333,7 @@
                 }
                 
                 const pdfData = [{ isPdf: true, content: text }];
-                await uploadToFirestore(pdfData, 'PDF');
+                await uploadToFirestoreInBatches(pdfData, 'PDF');
             };
             reader.onerror = () => {
                 uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ Error reading file.</span>`;
@@ -411,55 +377,77 @@
                 };
                 parsedData.push(dataItem);
             }
-            uploadToFirestore(parsedData, fileType);
+            uploadToFirestoreInBatches(parsedData, fileType);
         }
 
-        async function uploadToFirestore(data, fileType) {
+        async function uploadToFirestoreInBatches(data, fileType) {
             if (!userId) {
                 uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ Admin login is required to upload a file.</span>`;
                 return;
             }
+            
+            const batch = writeBatch(db);
+            const chunkSize = 500;
+            const dataCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'caspher-data', 'entries');
+
+            // Clear old data first
+            const oldDocs = await getDocs(dataCollectionRef);
+            oldDocs.forEach(doc => batch.delete(doc.ref));
+
+            // Upload new data in chunks
+            for (let i = 0; i < data.length; i += chunkSize) {
+                const chunk = data.slice(i, i + chunkSize);
+                const chunkRef = doc(dataCollectionRef);
+                batch.set(chunkRef, { chunk: chunk });
+            }
 
             try {
-                const publicDataDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'caspher-data', 'files_master_doc');
-                await setDoc(publicDataDocRef, {
-                    data: data,
-                    uploadedBy: userId,
-                    uploadTime: new Date().toISOString(),
-                    fileType: fileType
-                });
-                uploadStatus.innerHTML = `<span class="text-green-400 font-semibold">✓ File uploaded and saved to database.</span>`;
+                await batch.commit();
+                uploadStatus.innerHTML = `<span class="text-green-400 font-semibold">✓ File uploaded and saved to database. Total entries: ${data.length}</span>`;
             } catch (error) {
                 console.error("Error uploading data to Firestore:", error);
                 uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ Error: Could not save data to database.</span>`;
             }
         }
 
-        const performSearch = () => {
-            if (caspherData.length === 0) {
-                resultBox.innerHTML = '<p class="text-center text-gray-400">No data available. Please wait for the admin to upload a file.</p>';
+        const performSearch = async () => {
+            const query = searchInput.value.toLowerCase().trim();
+            if (query.length < 3) {
+                resultBox.innerHTML = '<p class="text-center text-gray-400">Please enter at least 3 characters to search.</p>';
                 resultCount.textContent = '0 results';
                 return;
             }
 
-            const query = searchInput.value.toLowerCase().trim();
-            if (query === '') {
-                resultBox.innerHTML = '<p class="text-center text-gray-400">Please type something to search.</p>';
-                resultCount.textContent = '';
-                return;
-            }
+            resultBox.innerHTML = '<p class="text-center text-gray-400">Searching...</p>';
+            resultCount.textContent = '';
             
-            const matches = caspherData.filter(item => {
-                if (item.isPdf) {
-                    return item.content.toLowerCase().includes(query);
-                } else {
-                    return Object.values(item).some(value => 
-                        typeof value === 'string' && value.toLowerCase().includes(query)
-                    );
-                }
-            });
+            try {
+                const dataCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'caspher-data', 'entries');
+                const q = query(dataCollectionRef);
+                const querySnapshot = await getDocs(q);
+                
+                let allData = [];
+                querySnapshot.forEach((doc) => {
+                    const chunk = doc.data().chunk;
+                    allData = allData.concat(chunk);
+                });
 
-            renderResults(matches);
+                const matches = allData.filter(item => {
+                    if (item.isPdf) {
+                        return item.content.toLowerCase().includes(query);
+                    } else {
+                        return Object.values(item).some(value => 
+                            typeof value === 'string' && value.toLowerCase().includes(query)
+                        );
+                    }
+                });
+
+                renderResults(matches);
+            } catch (error) {
+                console.error("Error searching data:", error);
+                resultBox.innerHTML = `<p class="text-center text-red-400">Error: Could not perform search.</p>`;
+                resultCount.textContent = '';
+            }
         };
         
         function renderResults(matches) {
@@ -554,18 +542,29 @@
         }
 
         async function analyzeData() {
-            if (caspherData.length === 0) {
-                // Using a custom message box instead of alert()
+            uploadStatus.textContent = 'Counting total entries...';
+            const dataCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'caspher-data', 'entries');
+            const querySnapshot = await getDocs(dataCollectionRef);
+
+            let totalEntries = 0;
+            const allData = [];
+            querySnapshot.forEach(doc => {
+                const chunk = doc.data().chunk;
+                totalEntries += chunk.length;
+                allData.push(...chunk);
+            });
+
+            if (totalEntries === 0) {
                 showCustomMessage('No data available. Please upload a file first.');
                 return;
             }
             summaryModal.classList.remove('hidden');
             modalTitle.textContent = 'Data Analysis Report';
-            summaryContent.innerHTML = `<span class="text-white">Analyzing data...</span>`;
+            summaryContent.innerHTML = `<span class="text-white">Analyzing ${totalEntries} entries...</span>`;
             listenReportButton.disabled = true;
             ttsAudio.classList.add('hidden');
 
-            const limitedData = caspherData.slice(0, 500); // Limiting data to fit within LLM context window.
+            const limitedData = allData.slice(0, 500);
             
             const prompt = `As a professional data analyst, analyze this dataset and provide a brief summary of key trends, characteristics, and notable patterns.
             Data: ${JSON.stringify(limitedData)}
