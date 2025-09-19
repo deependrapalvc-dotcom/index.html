@@ -21,14 +21,6 @@
         .border-accent { border-color: #ffff00; }
         .ring-accent:focus { ring-color: #ffff00; }
         
-        #drop-zone {
-            border: 2px dashed #4b5563;
-            transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
-        }
-        #drop-zone.drag-over {
-            background-color: #1f2937;
-            border-color: #ffff00;
-        }
         .result-item {
             border-left: 4px solid #4b5563;
             transition: all 0.2s ease-in-out;
@@ -81,7 +73,7 @@
         </div>
         
         <div id="admin-login-form">
-            <p class="text-gray-400 mb-4">Login to upload data.</p>
+            <p class="text-gray-400 mb-4">Login to view data status.</p>
             <div class="space-y-4">
                 <input type="text" id="admin-username" placeholder="Username" class="w-full p-3 bg-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-yellow-400 focus:ring-2 ring-accent transition">
                 <input type="password" id="admin-password" placeholder="Password" class="w-full p-3 bg-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-yellow-400 focus:ring-2 ring-accent transition">
@@ -92,16 +84,7 @@
 
         <div id="admin-upload-section" class="hidden">
             <p class="text-green-400 font-semibold mb-4">✓ Admin Logged In</p>
-            <div id="drop-zone" class="w-full p-8 text-center rounded-xl cursor-pointer">
-                <div class="flex flex-col items-center justify-center text-gray-400">
-                    <svg class="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-4-4V6a4 4 0 014-4h10a4 4 0 014 4v6a4 4 0 01-4 4H7z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 16v1a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2h2m16 9v-5.5a2.5 2.5 0 00-5 0V14m-2-5h5l-2.5-4-2.5 4z"></path></svg>
-                    <p class="text-lg font-semibold">Drag and drop file</p>
-                    <p class="mt-1 text-sm">or</p>
-                    <button id="file-select-button" class="mt-2 accent-bg text-gray-900 font-bold py-2 px-4 rounded-lg shadow-md transition-transform hover:scale-105">Select File</button>
-                    <input type="file" id="file-input" class="hidden" accept=".csv, .xlsx">
-                </div>
-            </div>
-            <div id="upload-status" class="text-center mt-4 text-gray-400"></div>
+            <p id="upload-status" class="text-center mt-4 text-gray-400">Loading data from GitHub...</p>
             <button id="admin-logout-btn" class="w-full mt-4 bg-gray-700 text-white font-bold py-2 rounded-lg hover:bg-gray-600 transition">Logout</button>
         </div>
     </div>
@@ -125,7 +108,7 @@
                 <p id="result-count" class="text-gray-400"></p>
             </div>
             <div id="result-box" class="space-y-3">
-                <p class="text-center text-gray-400">Please wait for an admin to upload a file to begin searching.</p>
+                <p class="text-center text-gray-400">Loading data. Please wait...</p>
             </div>
         </section>
     </main>
@@ -133,7 +116,8 @@
     <script>
         let dataContent = null;
         let columnIndices = {};
-        
+        const GITHUB_CSV_URL = 'https://raw.githubusercontent.com/Deependra-github/Caspher-Finder/main/data.csv';
+
         const columnAliases = {
             id: ['casperfhrid', 'caspher id', 'caspherid', 'id'],
             hub: ['hubname', 'hub name', 'hub'],
@@ -165,12 +149,7 @@
         const adminLoginBtn = document.getElementById('admin-login-btn');
         const adminLogoutBtn = document.getElementById('admin-logout-btn');
         const adminStatus = document.getElementById('admin-status');
-
-        const dropZone = document.getElementById('drop-zone');
-        const fileInput = document.getElementById('file-input');
-        const fileSelectButton = document.getElementById('file-select-button');
         const uploadStatus = document.getElementById('upload-status');
-        
         const searchInput = document.getElementById('search-input');
         const searchButton = document.getElementById('search-button');
         const resultBox = document.getElementById('result-box');
@@ -192,7 +171,52 @@
             } else {
                 searchInput.disabled = true;
                 searchButton.disabled = true;
-                resultBox.innerHTML = '<p class="text-center text-gray-400">Please wait for an admin to upload a file to begin searching.</p>';
+                resultBox.innerHTML = '<p class="text-center text-gray-400">Loading data. Please wait...</p>';
+            }
+        };
+
+        // Data Loading Logic
+        const loadDataFromGithub = async () => {
+            try {
+                uploadStatus.textContent = 'Loading data...';
+                const response = await fetch(GITHUB_CSV_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const csvText = await response.text();
+                
+                const lines = csvText.split(/\r?\n/);
+                const parsedData = lines.map(line => line.split(','));
+
+                if (parsedData.length === 0) {
+                    throw new Error('The file is empty.');
+                }
+
+                const header = parsedData[0].map(h => String(h).trim().toLowerCase());
+                dataContent = parsedData.slice(1).map(row => row.map(cell => String(cell).trim()));
+
+                columnIndices.id = findColumnIndex(header, columnAliases.id);
+                columnIndices.hub = findColumnIndex(header, columnAliases.hub);
+                columnIndices.name = findColumnIndex(header, columnAliases.name);
+                columnIndices.mobile = findColumnIndex(header, columnAliases.mobile);
+                columnIndices.ofd = findColumnIndex(header, columnAliases.ofd);
+                columnIndices.ofp = findColumnIndex(header, columnAliases.ofp);
+
+                if (columnIndices.id === -1 || columnIndices.hub === -1 || columnIndices.name === -1 || columnIndices.mobile === -1) {
+                    const missing = [];
+                    if (columnIndices.id === -1) missing.push(`Casper ID`);
+                    if (columnIndices.hub === -1) missing.push(`Hub Name`);
+                    if (columnIndices.name === -1) missing.push(`Full Name`);
+                    if (columnIndices.mobile === -1) missing.push(`Contact`);
+                    throw new Error(`File header is missing required columns. Missing: ${missing.join(', ')}`);
+                }
+
+                uploadStatus.innerHTML = `<span class="text-green-400 font-semibold">✓ Data loaded successfully.</span>`;
+                updateSearchStatus();
+
+            } catch (error) {
+                console.error('Error loading data:', error);
+                uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ Failed to load data. Please check the file.</span>`;
             }
         };
 
@@ -224,115 +248,16 @@
         adminLogoutBtn.addEventListener('click', () => {
             isAdminLoggedIn = false;
             showAdminPanel(false);
-            uploadStatus.textContent = '';
             dataContent = null;
             updateSearchStatus();
             adminPanelContainer.classList.remove('open');
             adminPanelToggle.classList.remove('open');
         });
 
-        // File Upload Logic
-        const preventDefaults = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-        };
-
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, preventDefaults, false);
-        });
-
-        ['dragenter', 'dragover'].forEach(eventName => {
-            dropZone.addEventListener(eventName, () => dropZone.classList.add('drag-over'), false);
-        });
-
-        ['dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, () => dropZone.classList.remove('drag-over'), false);
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            const dt = e.dataTransfer;
-            const files = dt.files;
-            handleFile(files[0]);
-        }, false);
-
-        fileSelectButton.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
-
-        function handleFile(file) {
-            if (!file) {
-                uploadStatus.textContent = 'No file selected.';
-                return;
-            }
-            
-            uploadStatus.textContent = `"${file.name}" is loading...`;
-
-            const reader = new FileReader();
-
-            reader.onload = (e) => {
-                let parsedData = [];
-                const fileExtension = file.name.split('.').pop().toLowerCase();
-
-                if (fileExtension === 'csv') {
-                    const lines = e.target.result.split(/\r?\n/);
-                    parsedData = lines.map(line => line.split(','));
-                } else if (fileExtension === 'xlsx') {
-                    const workbook = XLSX.read(e.target.result, { type: 'binary' });
-                    const sheetName = workbook.SheetNames[0];
-                    const sheet = workbook.Sheets[sheetName];
-                    parsedData = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
-                } else {
-                    uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ Unsupported file format. Please upload a .csv or .xlsx file.</span>`;
-                    return;
-                }
-
-                if (parsedData.length === 0) {
-                    uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ The file is empty.</span>`;
-                    return;
-                }
-
-                const header = parsedData[0].map(h => String(h).trim().toLowerCase());
-                dataContent = parsedData.slice(1).map(row => row.map(cell => String(cell).trim()));
-
-                columnIndices.id = findColumnIndex(header, columnAliases.id);
-                columnIndices.hub = findColumnIndex(header, columnAliases.hub);
-                columnIndices.name = findColumnIndex(header, columnAliases.name);
-                columnIndices.mobile = findColumnIndex(header, columnAliases.mobile);
-                columnIndices.ofd = findColumnIndex(header, columnAliases.ofd);
-                columnIndices.ofp = findColumnIndex(header, columnAliases.ofp);
-
-
-                if (columnIndices.id === -1 || columnIndices.hub === -1 || columnIndices.name === -1 || columnIndices.mobile === -1) {
-                    const missing = [];
-                    if (columnIndices.id === -1) missing.push(`Casper ID`);
-                    if (columnIndices.hub === -1) missing.push(`Hub Name`);
-                    if (columnIndices.name === -1) missing.push(`Full Name`);
-                    if (columnIndices.mobile === -1) missing.push(`Contact`);
-                    
-                    uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ File header is missing required columns.<br>Missing: ${missing.join(', ')}</span>`;
-                    dataContent = null;
-                    return;
-                }
-
-                uploadStatus.innerHTML = `<span class="text-green-400 font-semibold">✓ File "${file.name}" loaded successfully.</span>`;
-                updateSearchStatus();
-            };
-            
-            reader.onerror = () => {
-                uploadStatus.innerHTML = `<span class="text-red-400 font-semibold">✗ Error occurred while reading the file.</span>`;
-            };
-
-            const fileExtension = file.name.split('.').pop().toLowerCase();
-            if (fileExtension === 'xlsx') {
-                reader.readAsBinaryString(file);
-            } else {
-                reader.readAsText(file);
-            }
-        }
-
         // Search Logic
         const performSearch = () => {
             if (!dataContent) {
-                resultBox.innerHTML = '<p class="text-center text-gray-400">Please wait for an admin to upload a file.</p>';
+                resultBox.innerHTML = '<p class="text-center text-gray-400">Loading data. Please wait...</p>';
                 return;
             }
 
@@ -402,8 +327,9 @@
             }
         });
         
-        // Initial setup
+        // Initial setup - Load data when the page opens
         updateSearchStatus();
+        loadDataFromGithub();
     </script>
 </body>
 </html>
