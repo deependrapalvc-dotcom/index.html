@@ -356,14 +356,23 @@
 
             let html = '';
             matches.forEach(match => {
+                const ofdValue = (columnIndices.ofd !== -1 && match[columnIndices.ofd]) ? match[columnIndices.ofd]?.trim() : '0';
+                const ofpValue = (columnIndices.ofp !== -1 && match[columnIndices.ofp]) ? match[columnIndices.ofp]?.trim() : '0';
+                
+                const ofdNum = parseInt(ofdValue, 10) || 0;
+                const ofpNum = parseInt(ofpValue, 10) || 0;
+                const totalLoad = ofdNum + ofpNum;
+
                 const result = {
                     id: match[columnIndices.id]?.trim() || 'N/A',
                     hub: match[columnIndices.hub]?.trim() || 'N/A',
                     name: match[columnIndices.name]?.trim() || 'N/A',
                     mobile: match[columnIndices.mobile]?.trim() || 'N/A',
-                    ofd: (columnIndices.ofd !== -1 && match[columnIndices.ofd]) ? match[columnIndices.ofd]?.trim() : 'N/A',
-                    ofp: (columnIndices.ofp !== -1 && match[columnIndices.ofp]) ? match[columnIndices.ofp]?.trim() : 'N/A'
+                    ofd: ofdValue,
+                    ofp: ofpValue,
+                    totalLoad: totalLoad
                 };
+
                 html += `
                     <div class="result-item bg-gray-800 p-4 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-x-6 gap-y-2">
                         <div class="flex-grow">
@@ -374,6 +383,7 @@
                                 <div class="flex-shrink-0"><strong class="text-gray-400">Contact:</strong> <span class="font-semibold text-white">${result.mobile}</span></div>
                                 <div class="flex-shrink-0"><strong class="text-gray-400">OFD:</strong> <span class="font-semibold text-white">${result.ofd}</span></div>
                                 <div class="flex-shrink-0"><strong class="text-gray-400">OFP:</strong> <span class="font-semibold text-white">${result.ofp}</span></div>
+                                <div class="flex-shrink-0"><strong class="text-gray-400">Total Load:</strong> <span class="font-bold accent-text">${result.totalLoad}</span></div>
                             </div>
                         </div>
                     </div>
@@ -392,9 +402,6 @@
             }
         });
         
-        // Removed the event listeners for searchOfdBtn and searchOfpBtn
-        // as the buttons are now removed from the HTML.
-
         // Initial setup
         updateSearchStatus();
     </script>
