@@ -117,10 +117,6 @@
                 <input type="text" id="search-input" placeholder="Search here..." class="w-full p-4 bg-gray-700 border-2 border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-yellow-400 focus:ring-2 ring-accent transition">
                 <button id="search-button" class="w-full md:w-auto accent-bg text-gray-900 font-bold py-4 px-8 rounded-lg shadow-md transition-transform hover:scale-105">Search</button>
             </div>
-            <div class="flex flex-wrap justify-center md:justify-start gap-4 mt-4">
-                <button id="search-ofd-btn" class="text-white bg-gray-700 py-2 px-4 rounded-lg hover:bg-gray-600 transition">Search OFD</button>
-                <button id="search-ofp-btn" class="text-white bg-gray-700 py-2 px-4 rounded-lg hover:bg-gray-600 transition">Search OFP</button>
-            </div>
         </section>
         
         <section id="results-section" class="w-full mt-8">
@@ -177,8 +173,6 @@
         
         const searchInput = document.getElementById('search-input');
         const searchButton = document.getElementById('search-button');
-        const searchOfdBtn = document.getElementById('search-ofd-btn');
-        const searchOfpBtn = document.getElementById('search-ofp-btn');
         const resultBox = document.getElementById('result-box');
         const resultCount = document.getElementById('result-count');
 
@@ -398,15 +392,8 @@
             }
         });
         
-        searchOfdBtn.addEventListener('click', () => {
-            searchInput.value = 'OFD';
-            performSearch();
-        });
-
-        searchOfpBtn.addEventListener('click', () => {
-            searchInput.value = 'OFP';
-            performSearch();
-        });
+        // Removed the event listeners for searchOfdBtn and searchOfpBtn
+        // as the buttons are now removed from the HTML.
 
         // Initial setup
         updateSearchStatus();
